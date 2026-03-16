@@ -1,0 +1,140 @@
+---
+title: "atualizar_ratings_elo"
+description: "Update Elo ratings for two teams after a match result."
+---
+
+## Signature
+
+```python
+atualizar_ratings_elo(rating_c, rating_v, placar_c, placar_v, vantagem_c) -> (float, float)
+```
+
+Applies the standard Elo update rule — adjusted for home advantage and goal margin — to produce new ratings for both teams after a completed match.
+
+## Parameters
+
+<ParamField path="rating_c" type="float" required>
+  Current Elo rating of the home team before this match.
+</ParamField>
+
+<ParamField path="rating_v" type="float" required>
+  Current Elo rating of the away team before this match.
+</ParamField>
+
+<ParamField path="placar_c" type="integer" required>
+  Goals scored by the home team in the match.
+</ParamField>
+
+<ParamField path="placar_v" type="integer" required>
+  Goals scored by the away team in the match.
+</ParamField>
+
+<ParamField path="vantagem_c" type="float" required>
+  Home advantage for the home team in Elo points, as computed by [`calcular_vantagens_casa()`](/api/calcular-vantagens-casa). Pass `0` to apply no home advantage.
+</ParamField>
+
+## Return values
+
+Returns a tuple `(novo_rating_c, novo_rating_v)`.
+
+<ResponseField name="novo_rating_c" type="float">
+  Updated Elo rating for the home team.
+</ResponseField>
+
+<ResponseField name="novo_rating_v" type="float">
+  Updated Elo rating for the away team.
+</ResponseField>
+
+## How it works
+
+### Actual result
+
+The actual match outcome is encoded as a score for the home team:
+
+| Outcome | `resultado_real` |
+|---|---|
+| Home win | `1.0` |
+| Draw | `0.5` |
+| Away win | `0.0` |
+
+### Expected outcome
+
+The expected probability that the home team wins, incorporating the home advantage bonus:
+
+```
+exp_c = 1 / (1 + 10 ** ((rating_v - (rating_c + vantagem_c)) / 400))
+exp_v = 1 - exp_c
+```
+
+### K-factor adjustment
+
+The K-factor scales the rating change. Larger goal margins produce a higher K, rewarding dominant wins more:
+
+```
+diff_gols = abs(placar_c - placar_v)
+k = ELO_K_FACTOR_BASE * (1 + 0.5 * max(0, diff_gols - 1))
+```
+
+Where `ELO_K_FACTOR_BASE = 30`. Examples:
+
+| Goal difference | K |
+|---|---|
+| 0 (draw) | 30 |
+| 1 | 30 |
+| 2 | 45 |
+| 3 | 60 |
+| 4 | 75 |
+
+### Rating update
+
+```
+novo_rating_c = rating_c + k * (resultado_real - exp_c)
+novo_rating_v = rating_v + k * ((1 - resultado_real) - exp_v)
+```
+
+## Function body
+
+```python
+def atualizar_ratings_elo(rating_c, rating_v, placar_c, placar_v, vantagem_c):
+    # Resultado real
+    if placar_c > placar_v:
+        resultado_real = 1.0
+    elif placar_c == placar_v:
+        resultado_real = 0.5
+    else:
+        resultado_real = 0.0
+
+    # Expectativa de resultado
+    exp_c = 1 / (1 + 10 ** ((rating_v - (rating_c + vantagem_c)) / 400))
+    exp_v = 1 - exp_c
+
+    # K pode ser ajustado conforme a diferença de gols
+    diff_gols = abs(placar_c - placar_v)
+    k = ELO_K_FACTOR_BASE * (1 + 0.5 * max(0, diff_gols - 1))
+
+    novo_rating_c = rating_c + k * (resultado_real - exp_c)
+    novo_rating_v = rating_v + k * ((1 - resultado_real) - exp_v)
+    return novo_rating_c, novo_rating_v
+```
+
+## Example
+
+```python
+from previsao import atualizar_ratings_elo
+
+# Flamengo (home, 1550) beats Vasco (away, 1480) 2-0
+# Flamengo has a home advantage of 40 Elo points
+novo_flamengo, novo_vasco = atualizar_ratings_elo(
+    rating_c=1550,
+    rating_v=1480,
+    placar_c=2,
+    placar_v=0,
+    vantagem_c=40.0,
+)
+print(f"Flamengo: {novo_flamengo:.1f}")
+print(f"Vasco:    {novo_vasco:.1f}")
+```
+
+<Note>
+  For accurate results, call this function in chronological order of matches. Elo is a sequential system: each team's rating when entering a match depends on all prior match updates. Feeding matches out of order will produce incorrect ratings.
+</Note>

@@ -1,0 +1,152 @@
+---
+title: "Running Predictions"
+description: "How to run match predictions using the command-line script or the desktop GUI."
+---
+
+<Note>
+All team names entered for prediction must already exist in the CSV data file. The model has no information about teams with no historical match records, and will raise an error if an unknown team name is provided.
+</Note>
+
+<Tabs>
+  <Tab title="Command Line">
+
+## Running `previsao.py`
+
+The command-line script computes predictions analytically — no simulation loop, just direct Poisson + Elo calculations.
+
+### Step 1 — Configure the matches to predict
+
+Open `previsao.py` and edit the `jogos` list inside the `main()` function. Each entry is a tuple of `(mandante, visitante)` using lowercase team names as they appear in the CSV:
+
+```python
+jogos = [
+    ('internacional', 'vitoria'),
+    ('bahia', 'atletico mineiro'),
+    ('corinthians', 'bragantino'),
+    ('cruzeiro', 'gremio'),
+    ('fortaleza', 'ceara'),
+    ('juventude', 'sport'),
+    ('flamengo', 'sao paulo'),
+    ('vasco', 'botafogo'),
+    ('santos', 'palmeiras'),
+    ('mirassol', 'fluminense'),
+]
+```
+
+Replace these pairs with the fixtures you want to predict before running.
+
+### Step 2 — Run the script
+
+```bash
+python previsao.py
+```
+
+The script will:
+1. Load and normalize `br-25.csv`
+2. Calculate Poisson attack/defence strengths for all teams
+3. Build Elo ratings by replaying all historical matches in the CSV
+4. Run `prever_partida_hibrido()` for each fixture in `jogos`
+5. Print a Markdown-formatted results table to stdout
+
+### Full `main()` structure
+
+```python
+def main():
+    df = pd.read_csv('sassamaru-br-25/br-25.csv')
+    df['mandante'] = df['mandante'].str.strip().str.lower()
+    df['visitante'] = df['visitante'].str.strip().str.lower()
+    df['gols_mandante'] = df['gols_mandante'].astype(int)
+    df['gols_visitante'] = df['gols_visitante'].astype(int)
+
+    forcas_poisson, medias_liga = calcular_forcas_poisson(df)
+    vantagens_casa = calcular_vantagens_casa(df)
+
+    # Build Elo ratings by replaying historical matches
+    elo_ratings = {}
+    for _, partida in df.iterrows():
+        ...
+
+    jogos = [
+        ('internacional', 'vitoria'),
+        ...
+    ]
+
+    context = {
+        'elo_ratings': elo_ratings,
+        'forcas_poisson': forcas_poisson,
+        'medias_liga': medias_liga,
+        'vantagens_casa': vantagens_casa
+    }
+
+    for casa, visita in jogos:
+        r = prever_partida_hibrido(casa, visita, context)
+        resultados.append(r)
+
+    print("# Previsão de Jogos - Modelo Híbrido Poisson + Elo\n")
+    print(df_resultados.to_markdown(index=False))
+```
+
+### Example output
+
+The script prints a Markdown table to stdout with the following columns:
+
+```
+# Previsão de Jogos - Modelo Híbrido Poisson + Elo
+
+| Mandante     | Visitante        | Gols Mandante | Gols Visitante | Prob Mandante (%) | Prob Empate (%) | Prob Visitante (%) | Palpite   |
+|:-------------|:-----------------|:-------------:|:--------------:|:-----------------:|:---------------:|:-----------------:|:----------|
+| Internacional | Vitoria         |          1.42 |           1.18 |              43.2 |            27.1 |               29.7 | Mandante  |
+| Bahia        | Atletico Mineiro |          1.31 |           1.45 |              36.8 |            28.4 |               34.8 | Mandante  |
+| Flamengo     | Sao Paulo        |          1.65 |           1.10 |              50.3 |            25.2 |               24.5 | Mandante  |
+```
+
+  </Tab>
+  <Tab title="Desktop GUI">
+
+## Running `sassamaru.py`
+
+The desktop GUI allows you to configure matches interactively and run Monte Carlo simulations with 10,000 or 100,000 iterations.
+
+### Step 1 — Launch the application
+
+```bash
+python sassamaru.py
+```
+
+The window titled **"Simulador Campeonato Brasileiro"** will open and automatically load `br-25.csv` from the same directory as the script.
+
+### Step 2 — Enter match fixtures
+
+The main window shows **10 match input rows**, each with a **Mandante** (home) and **Visitante** (away) text field. Type team names exactly as they appear in the CSV (the GUI validates names against the loaded data before running).
+
+You can leave unused rows blank — the simulation will only run for rows where both fields are filled.
+
+### Step 3 — Run simulations
+
+Two simulation buttons are available:
+
+- **Rodar 10 mil simulações** — Runs 10,000 Monte Carlo iterations per match. Faster, suitable for quick estimates.
+- **Rodar 100 mil simulações** — Runs 100,000 iterations per match. More accurate probability estimates, takes longer.
+
+A **progress bar** at the bottom of the window tracks simulation progress, showing the number of completed iterations out of the total.
+
+Simulations run in a background thread using `multiprocessing.Pool`, so the UI stays responsive. When complete, a dialog box appears showing the filename of the saved results.
+
+### Step 4 — View results
+
+Results are automatically saved to a timestamped Markdown file in the same directory as the script:
+
+```
+previsao_jogos_resumo_20250316_143022.md
+```
+
+The file contains a full Markdown table with Elo ratings, expected goals, and win/draw/loss probabilities for each fixture.
+
+### Additional features
+
+**Mostrar Ranking xG dos Clubes** — Opens a popup window showing each club's total and average expected goals (xG) based on the current CSV data.
+
+**Mostrar Ranking ELO dos Clubes** — Opens a popup window showing the current dynamic Elo rating for every club in the dataset, sorted from highest to lowest.
+
+  </Tab>
+</Tabs>

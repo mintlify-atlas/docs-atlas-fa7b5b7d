@@ -1,0 +1,74 @@
+---
+title: "Introduction"
+description: "Learn how Sassamaru BR-25 predicts Brasileirão match outcomes using a hybrid Poisson + Elo model."
+---
+
+Sassamaru BR-25 is a match prediction system for the Campeonato Brasileiro (Brasileirão). It combines two complementary statistical methods — Poisson distribution and Elo ratings — into a single hybrid model that estimates the probability of each possible outcome for any given match.
+
+## How the hybrid model works
+
+The model has two layers:
+
+**Poisson layer** — Estimates the expected number of goals each team will score based on historical attack and defense strengths, normalized against league averages. The Poisson distribution then converts those expected goals into a full probability distribution over possible scorelines.
+
+**Elo layer** — Tracks each team's relative strength dynamically across the season. After every match, Elo ratings are updated based on the result and goal margin. Before each prediction, the Elo difference between the two teams is used to scale the Poisson goal expectations up or down, giving the stronger team a realistic edge.
+
+This combination means the model responds to recent form (via Elo) without discarding the structural information encoded in season-wide attack and defense rates (via Poisson).
+
+## Two interfaces
+
+Sassamaru BR-25 ships with two ways to run predictions:
+
+- **`previsao.py`** — A command-line script. Edit the `jogos` list inside `main()`, run the script, and get a Markdown table of predictions printed to stdout. Designed for quick runs and copy-pasting results into posts or reports.
+- **`sassamaru.py`** — A desktop GUI application built with Tkinter. Enter up to 10 fixtures through a form, run 10,000 or 100,000 Monte Carlo simulations, and export results to a Markdown file. Also shows xG and Elo rankings per club.
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Match outcome probabilities" icon="chart-bar">
+    Calculates win, draw, and loss probabilities for each fixture, normalized to sum to 100%.
+  </Card>
+  <Card title="Expected goals (xG)" icon="futbol">
+    Reports Elo-adjusted expected goals for both teams alongside probabilities.
+  </Card>
+  <Card title="Automatic tip" icon="lightbulb">
+    Picks the most likely outcome (Mandante, Empate, or Visitante) automatically based on probabilities.
+  </Card>
+  <Card title="Markdown output" icon="file-lines">
+    Prints results as a Markdown table ready to paste into posts, reports, or issues.
+  </Card>
+  <Card title="Dynamic Elo tracking" icon="arrow-trend-up">
+    Elo ratings update after every historical match, reflecting current team strength.
+  </Card>
+  <Card title="Tunable parameters" icon="sliders">
+    `ELO_VANTAGEM_CASA_PADRAO` and `ELO_INFLUENCE` can be adjusted to calibrate home advantage and Elo sensitivity.
+  </Card>
+</CardGroup>
+
+## Requirements
+
+**Command-line script (`previsao.py`)**
+
+- Python 3.7+
+- `pandas`
+
+```bash
+pip install pandas
+```
+
+**Desktop GUI (`sassamaru.py`)**
+
+- Python 3.7+
+- `pandas`
+- `numpy`
+- `tkinter` (included in most Python distributions)
+
+```bash
+pip install pandas numpy
+```
+
+## Next step
+
+<Card title="Quickstart" icon="rocket" href="/quickstart">
+  Run your first Brasileirão prediction in under 5 minutes.
+</Card>

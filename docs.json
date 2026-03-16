@@ -1,122 +1,85 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Sassamaru BR-25",
+  "theme": "palm",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#46bde6",
+    "light": "#a4e0f1",
+    "dark": "#80cee3"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "https://media.brand.dev/aaef64b6-e05e-46d3-a477-818f240db992.png",
+  "logo": {
+    "light": "https://media.brand.dev/c202ad81-19e6-4258-854e-34df554ea2df.svg",
+    "dark": "https://media.brand.dev/c202ad81-19e6-4258-854e-34df554ea2df.svg"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/mtgr18977/sassamaru-br-25"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/mtgr18977/sassamaru-br-25"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
+            "pages": ["introduction", "quickstart"]
+          },
+          {
+            "group": "Concepts",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "concepts/poisson-model",
+              "concepts/elo-rating",
+              "concepts/hybrid-model"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Guides",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "guides/data-preparation",
+              "guides/running-predictions",
+              "guides/calibration",
+              "guides/adding-results"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Reference",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "reference/configuration",
+              "reference/data-format",
+              "reference/output-format"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Core Functions",
             "pages": [
-              "api-reference/introduction"
+              "api/prever-partida-hibrido",
+              "api/calcular-forcas-poisson",
+              "api/calcular-vantagens-casa",
+              "api/atualizar-ratings-elo"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Utilities",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/calcular-xg-por-clube",
+              "api/normalize-and-validate"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

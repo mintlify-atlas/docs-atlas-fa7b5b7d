@@ -1,0 +1,102 @@
+---
+title: "Poisson Model"
+description: "How Sassamaru BR-25 uses the Poisson distribution to estimate expected goals."
+---
+
+## Why Poisson?
+
+In football, goals are relatively rare events that occur independently of one another — the timing of one goal does not materially affect the probability of the next. These properties make the Poisson distribution a natural fit for modelling the number of goals each team scores in a match.
+
+Given a team's expected goals (λ, or `lmbda`) for a particular fixture, the Poisson distribution gives the probability of observing exactly `k` goals:
+
+```python
+def poisson(lmbda, k):
+    return math.exp(-lmbda) * (lmbda ** k) / math.factorial(k)
+```
+
+Because the two teams' goal tallies are treated as independent Poisson processes, the probability of any specific scoreline (e.g. 2–1) is simply the product of the two individual probabilities.
+
+## Attack and defense strength factors
+
+Raw league averages are a poor estimate of expected goals for a specific fixture because teams differ widely in attacking and defensive quality. Sassamaru BR-25 normalises each team's historical scoring and conceding rates against the league average to derive four strength indices:
+
+| Factor | Description |
+|---|---|
+| `ataque_casa` | Home attacking strength — how many more (or fewer) goals the team scores at home relative to the league average at home. |
+| `defesa_casa` | Home defensive strength — how many goals the team concedes at home relative to the league average conceded at home. |
+| `ataque_fora` | Away attacking strength — goals scored away relative to the league away average. |
+| `defesa_fora` | Away defensive strength — goals conceded away relative to the league away average. |
+
+A value above 1.0 indicates above-average performance; below 1.0 indicates below-average.
+
+## League averages as a normalisation baseline
+
+The strength factors are always expressed relative to the league as a whole, using two baseline values:
+
+- `media_gols_casa` — the average number of goals scored by home teams across all historical matches.
+- `media_gols_fora` — the average number of goals scored by away teams across all historical matches.
+
+Multiplying the two teams' relevant strength factors together and then multiplying by the corresponding league average produces the **base expected goals** (λ) for each team in the fixture, before any Elo adjustment.
+
+## Calculating strength factors
+
+The `calcular_forcas_poisson(df)` function iterates over every team in the dataset and computes all four strength indices:
+
+```python
+def calcular_forcas_poisson(df):
+    """
+    Calcula as forças de ataque e defesa (em casa e fora) para cada time usando a média de gols,
+    com base no modelo de Poisson, e retorna também as médias da liga.
+    Parâmetros:
+        df (pd.DataFrame): DataFrame contendo os jogos, mandantes, visitantes e gols.
+    Retorna:
+        tuple: (dicionário de forças por time, dicionário de médias da liga)
+    """
+    times = pd.unique(df['mandante'].tolist() + df['visitante'].tolist())
+    forcas = {}
+    # Médias da liga
+    media_gols_casa = df['gols_mandante'].mean()
+    media_gols_fora = df['gols_visitante'].mean()
+    medias_liga = {'gols_casa': media_gols_casa, 'gols_fora': media_gols_fora}
+    # Forças de ataque/defesa para cada time
+    for time in times:
+        jogos_casa = df[df['mandante'] == time]
+        jogos_fora = df[df['visitante'] == time]
+        ataque_casa = (jogos_casa['gols_mandante'].mean() / media_gols_casa) if not jogos_casa.empty and media_gols_casa > 0 else 1.0
+        defesa_casa = (jogos_casa['gols_visitante'].mean() / media_gols_fora) if not jogos_casa.empty and media_gols_fora > 0 else 1.0
+        ataque_fora = (jogos_fora['gols_visitante'].mean() / media_gols_fora) if not jogos_fora.empty and media_gols_fora > 0 else 1.0
+        defesa_fora = (jogos_fora['gols_mandante'].mean() / media_gols_casa) if not jogos_fora.empty and media_gols_casa > 0 else 1.0
+        forcas[time] = {
+            'ataque_casa': ataque_casa,
+            'defesa_casa': defesa_casa,
+            'ataque_fora': ataque_fora,
+            'defesa_fora': defesa_fora
+        }
+    return forcas, medias_liga
+```
+
+Teams with no home or away matches in the dataset fall back to a neutral strength of `1.0` to avoid division-by-zero errors.
+
+## Scoreline probability matrix
+
+With expected goals computed for each team, the model iterates over every possible scoreline from 0–0 up to `POISSON_MAX_GOLS`–`POISSON_MAX_GOLS` and accumulates probabilities:
+
+```python
+POISSON_MAX_GOLS = 8
+
+for g_c in range(POISSON_MAX_GOLS + 1):
+    for g_v in range(POISSON_MAX_GOLS + 1):
+        prob_placar = poisson(gols_finais_casa, g_c) * poisson(gols_finais_visitante, g_v)
+        if g_c > g_v:
+            prob_vitoria_casa += prob_placar
+        elif g_c == g_v:
+            prob_empate += prob_placar
+        else:
+            prob_vitoria_visitante += prob_placar
+```
+
+The three accumulated values are then normalised by their sum to produce calibrated win/draw/loss probabilities.
+
+<Note>
+`POISSON_MAX_GOLS = 8` is a deliberate truncation. For typical expected-goals values in the Campeonato Brasileiro (roughly 0.8–2.5 goals per team), the Poisson probability of any team scoring 9 or more goals in a single match is negligible — well under 0.1% of total probability mass. Truncating at 8 keeps computation fast without meaningfully affecting the output probabilities.
+</Note>

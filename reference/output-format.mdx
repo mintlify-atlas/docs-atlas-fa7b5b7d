@@ -1,0 +1,116 @@
+---
+title: "Output Format"
+description: "Format specification for prediction output tables and simulation result files."
+---
+
+Sassamaru BR-25 produces output in three forms depending on which entry point you use: a Markdown table printed to stdout by the CLI script, a `.md` summary file written by the GUI simulator, and a plain-text xG ranking shown in a popup window.
+
+## Command-line output (previsao.py)
+
+Running `previsao.py` prints a Markdown table to stdout, headed by a title line.
+
+### Column reference
+
+The table is built from the dict returned by `prever_partida_hibrido()`. The `main()` function renames several keys before rendering:
+
+| Column (in table) | Source key | Type | Format |
+|---|---|---|---|
+| `Mandante` | `Mandante` | string | Title case (`time_casa.title()`) |
+| `Visitante` | `Visitante` | string | Title case (`time_visitante.title()`) |
+| `Gols Mandante` | `Gols Esp. Mandante` | float | 2 decimal places |
+| `Gols Visitante` | `Gols Esp. Visitante` | float | 2 decimal places |
+| `Prob Mandante (%)` | `P(Mandante)%` | float | 1 decimal place |
+| `Prob Empate (%)` | `P(Empate)%` | float | 1 decimal place |
+| `Prob Visitante (%)` | `P(Visitante)%` | float | 1 decimal place |
+| `Palpite` | `Palpite` | string | `"Mandante"`, `"Empate"`, or `"Visitante"` |
+
+<Note>
+  The raw dict returned by `prever_partida_hibrido()` also includes `Elo Mandante` and `Elo Visitante` integer fields. These are dropped during the column selection step in `main()` before the Markdown table is printed.
+</Note>
+
+### Example output
+
+```markdown
+# Previsão de Jogos - Modelo Híbrido Poisson + Elo
+
+| Mandante      | Visitante         | Gols Mandante | Gols Visitante | Prob Mandante (%) | Prob Empate (%) | Prob Visitante (%) | Palpite   |
+|:------------- |:----------------- | ------------: | -------------: | ----------------: | --------------: | -----------------: |:----------|
+| Internacional | Vitoria           |          1.23 |           0.98 |              42.1 |            29.5 |               28.4 | Mandante  |
+| Bahia         | Atletico Mineiro  |          1.10 |           1.05 |              35.0 |            33.0 |               32.0 | Empate    |
+| Corinthians   | Bragantino        |          1.45 |           0.89 |              51.3 |            27.4 |               21.3 | Mandante  |
+| Flamengo      | Sao Paulo         |          1.67 |           0.94 |              55.8 |            25.6 |               18.6 | Mandante  |
+| Vasco         | Botafogo          |          1.02 |           1.31 |              28.7 |            30.2 |               41.1 | Visitante |
+```
+
+## GUI simulation output (sassamaru.py)
+
+When a simulation completes, `salvar_md_resumo_simulacao_com_elo()` writes a `.md` file to the working directory.
+
+### Filename
+
+```
+previsao_jogos_resumo_YYYYMMDD_HHMMSS.md
+```
+
+The timestamp uses `datetime.datetime.now().strftime('%Y%m%d_%H%M%S')`, so each run produces a uniquely named file.
+
+### Column reference
+
+The summary file averages probabilities and expected goals across all simulation iterations for each matchup.
+
+| Column | Type | Format | Description |
+|---|---|---|---|
+| `Mandante` | string | left-aligned | Home team name (raw, as entered in the GUI) |
+| `ELO Mandante` | integer | right-aligned | Elo rating for the home team |
+| `Visitante` | string | left-aligned | Away team name |
+| `ELO Visitante` | integer | right-aligned | Elo rating for the away team |
+| `Diferença ELO` | integer | right-aligned | `ELO Mandante − ELO Visitante` |
+| `Gols Mandante` | float | 2 decimal places | Average expected goals for the home team across simulations |
+| `Gols Visitante` | float | 2 decimal places | Average expected goals for the away team across simulations |
+| `Prob Mandante (%)` | float | 1 decimal place | Average home win probability (×100) |
+| `Prob Empate (%)` | float | 1 decimal place | Average draw probability (×100) |
+| `Prob Visitante (%)` | float | 1 decimal place | Average away win probability (×100) |
+| `Palpite` | string | left-aligned | `"Mandante"`, `"Empate"`, or `"Visitante"` |
+
+### File format
+
+```markdown
+# Previsão de Jogos - Resultado da Simulação com Elo Dinâmico
+
+| Mandante      | ELO Mandante | Visitante        | ELO Visitante | Diferença ELO |   Gols Mandante |   Gols Visitante |   Prob Mandante (%) |   Prob Empate (%) |   Prob Visitante (%) | Palpite   |
+|:--------------|-------------:|:-----------------|--------------:|--------------:|----------------:|-----------------:|--------------------:|------------------:|---------------------:|:----------|
+| flamengo      |         1532 | sao paulo        |          1489 |            43 |            1.67 |             0.94 |                55.8 |              25.6 |                 18.6 | Mandante  |
+| vasco         |         1471 | botafogo         |          1518 |           -47 |            1.02 |             1.31 |                28.7 |              30.2 |                 41.1 | Visitante |
+```
+
+<Note>
+  In the current implementation, `ELO Mandante` and `ELO Visitante` fall back to `ELO_RATING_INICIAL` (1500) in the summary file because Elo ratings are not propagated into the simulation result objects. The `Diferença ELO` column will therefore read `0` for all rows unless this logic is extended.
+</Note>
+
+## xG ranking output (sassamaru.py GUI)
+
+The "Mostrar Ranking xG dos Clubes" button opens a popup window showing a plain-text table of expected goals per club, computed via `calcular_xg_por_clube()`.
+
+### Format
+
+```
+Ranking xG Total dos Clubes:
+
+Clube                | xG Total   | xG Médio/Jogo
+--------------------------------------------------
+flamengo             |      28.34 |          1.89
+botafogo             |      25.11 |          1.67
+palmeiras            |      24.87 |          1.66
+corinthians          |      22.05 |          1.47
+sao paulo            |      21.90 |          1.46
+```
+
+### Column reference
+
+| Column | Width | Format | Description |
+|---|---|---|---|
+| `Clube` | 20 chars | left-aligned | Team name as it appears in the CSV (lowercase after normalization) |
+| `xG Total` | 10 chars | float, 2 decimal places | Sum of expected goals across all matches in the dataset |
+| `xG Médio/Jogo` | 12 chars | float, 2 decimal places | `xG Total / number of matches played` |
+
+The list is sorted by `xG Total` in descending order.

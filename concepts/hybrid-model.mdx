@@ -1,0 +1,140 @@
+---
+title: "Hybrid Model Architecture"
+description: "How Sassamaru BR-25 combines Poisson goal estimation with Elo-based strength adjustment."
+---
+
+## Core insight
+
+The Poisson model captures long-run historical patterns — how many goals a team typically scores at home, how well they defend away. But it is blind to *current* form: a team that has improved significantly over recent weeks will look the same as it did at the start of the season.
+
+Elo ratings solve this by updating continuously after every match and encoding the current strength of each team in a single number. The hybrid model uses Poisson as the structural baseline and Elo as a real-time correction factor.
+
+## Computation pipeline
+
+<Steps>
+  <Step title="Load historical match data">
+    Read the CSV of completed Campeonato Brasileiro matches, normalise team names, and cast goal columns to integers.
+  </Step>
+  <Step title="Compute Poisson strength factors">
+    Call `calcular_forcas_poisson(df)` to derive `ataque_casa`, `defesa_casa`, `ataque_fora`, and `defesa_fora` for every team, along with the league averages `media_gols_casa` and `media_gols_fora`.
+  </Step>
+  <Step title="Compute per-team home advantages">
+    Call `calcular_vantagens_casa(df)` to derive each team's Elo home-advantage bonus from their historical home goal difference.
+  </Step>
+  <Step title="Build Elo ratings chronologically">
+    Iterate through all historical matches in order, calling `atualizar_ratings_elo()` after each one. The resulting `elo_ratings` dict reflects every team's current strength.
+  </Step>
+  <Step title="Assemble the context object">
+    Package the four data sources into a single `context` dict:
+    ```python
+    context = {
+        'elo_ratings': elo_ratings,
+        'forcas_poisson': forcas_poisson,
+        'medias_liga': medias_liga,
+        'vantagens_casa': vantagens_casa
+    }
+    ```
+  </Step>
+  <Step title="Call prever_partida_hibrido() for each fixture">
+    Pass the home team name, away team name, and context to `prever_partida_hibrido()`. It returns a dict with expected goals, win/draw/loss probabilities, and a recommended pick.
+  </Step>
+</Steps>
+
+## Data flow summary
+
+| Stage | Input | Output |
+|---|---|---|
+| CSV ingestion | `br-25.csv` | Normalised DataFrame |
+| Poisson calibration | DataFrame | Attack/defense strength factors per team |
+| Home advantage | DataFrame | Elo home-advantage points per team |
+| Elo computation | DataFrame (chronological) | Current Elo rating per team |
+| Hybrid prediction | Context + fixture teams | Expected goals, probabilities, pick |
+
+## The prever_partida_hibrido() function
+
+```python
+def prever_partida_hibrido(time_casa, time_visitante, context):
+    elo_ratings = context['elo_ratings']
+    forcas_poisson = context['forcas_poisson']
+    medias_liga = context['medias_liga']
+    vantagens_casa = context['vantagens_casa']
+
+    # Step 1: Poisson base expected goals
+    ataque_casa = forcas_poisson[time_casa]['ataque_casa']
+    defesa_visitante = forcas_poisson[time_visitante]['defesa_fora']
+    gols_base_casa = ataque_casa * defesa_visitante * medias_liga['gols_casa']
+
+    ataque_visitante = forcas_poisson[time_visitante]['ataque_fora']
+    defesa_casa = forcas_poisson[time_casa]['defesa_casa']
+    gols_base_visitante = ataque_visitante * defesa_casa * medias_liga['gols_fora']
+
+    # Step 2: Elo adjustment factors
+    rating_casa = elo_ratings.get(time_casa, ELO_RATING_INICIAL)
+    rating_visitante = elo_ratings.get(time_visitante, ELO_RATING_INICIAL)
+    vantagem_time_casa = vantagens_casa.get(time_casa, ELO_VANTAGEM_CASA_PADRAO)
+
+    elo_diff = (rating_casa + vantagem_time_casa) - rating_visitante
+    fator_ajuste_casa = 1 + (elo_diff / 1000) * ELO_INFLUENCE
+    fator_ajuste_visitante = 1 - (elo_diff / 1000) * ELO_INFLUENCE
+
+    # Step 3: Apply adjustment
+    gols_finais_casa = gols_base_casa * max(0.1, fator_ajuste_casa)
+    gols_finais_visitante = gols_base_visitante * max(0.1, fator_ajuste_visitante)
+
+    # Step 4: Scoreline probability matrix
+    prob_vitoria_casa = 0
+    prob_empate = 0
+    prob_vitoria_visitante = 0
+    for g_c in range(POISSON_MAX_GOLS + 1):
+        for g_v in range(POISSON_MAX_GOLS + 1):
+            prob_placar = poisson(gols_finais_casa, g_c) * poisson(gols_finais_visitante, g_v)
+            if g_c > g_v:
+                prob_vitoria_casa += prob_placar
+            elif g_c == g_v:
+                prob_empate += prob_placar
+            else:
+                prob_vitoria_visitante += prob_placar
+
+    # Step 5: Normalise and return
+    total_prob = prob_vitoria_casa + prob_empate + prob_vitoria_visitante
+    ...
+```
+
+## Elo adjustment factors
+
+The Elo difference between the two teams (including the home advantage bonus) is scaled into a multiplicative adjustment for each team's expected goals:
+
+```
+elo_diff = (rating_casa + vantagem_time_casa) - rating_visitante
+fator_ajuste_casa = 1 + (elo_diff / 1000) * ELO_INFLUENCE
+fator_ajuste_visitante = 1 - (elo_diff / 1000) * ELO_INFLUENCE
+```
+
+| Variable | Meaning |
+|---|---|
+| `elo_diff` | Net Elo advantage for the home side, after adding the home-advantage bonus. Positive means home team is stronger. |
+| `fator_ajuste_casa` | Multiplier applied to the home team's Poisson base goals. Greater than 1 if the home side is rated higher. |
+| `fator_ajuste_visitante` | Multiplier applied to the away team's Poisson base goals. Less than 1 if the home side is rated higher. |
+
+Finally, the adjusted expected goals are:
+
+```
+gols_finais_casa = gols_base_casa * max(0.1, fator_ajuste_casa)
+gols_finais_visitante = gols_base_visitante * max(0.1, fator_ajuste_visitante)
+```
+
+<Note>
+  The `max(0.1, ...)` guard prevents the adjustment factor from reaching zero or going negative. Without it, a very large Elo gap could produce a negative expected-goals value, which is undefined for the Poisson distribution. The floor of `0.1` ensures the model always assigns at least a small probability to the weaker team scoring.
+</Note>
+
+## ELO_INFLUENCE tuning
+
+`ELO_INFLUENCE = 0.10` controls how strongly the Elo difference modifies the Poisson baseline. With a 400-point Elo gap and `ELO_INFLUENCE = 0.10`, the stronger team's expected goals increase by 4% and the weaker team's decrease by 4% — a modest, calibrated adjustment.
+
+| `ELO_INFLUENCE` | Effect |
+|---|---|
+| `0.05` | Minimal Elo correction; predictions stay close to historical Poisson averages. |
+| `0.10` | Default. Balanced blend of historical form and current strength. |
+| `0.35` | Aggressive correction; current Elo dominates over historical patterns. |
+
+The recommended tuning range is **0.05–0.35**. Values outside this range risk either ignoring meaningful rating differences or over-weighting short-term form at the expense of larger statistical samples.

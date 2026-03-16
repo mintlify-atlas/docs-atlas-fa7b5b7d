@@ -1,0 +1,164 @@
+---
+title: "prever_partida_hibrido"
+description: "Predict the outcome of a football match using the hybrid Poisson + Elo model."
+---
+
+## Signature
+
+```python
+prever_partida_hibrido(time_casa, time_visitante, context) -> dict
+```
+
+Combines Poisson-based expected goals with Elo rating adjustments to predict win/draw/loss probabilities and expected goals for both teams.
+
+## Parameters
+
+<ParamField path="time_casa" type="string" required>
+  Home team name, lowercase, matching the team name as stored in the CSV (e.g. `"flamengo"`, `"atletico mineiro"`).
+</ParamField>
+
+<ParamField path="time_visitante" type="string" required>
+  Away team name, lowercase, matching the team name as stored in the CSV.
+</ParamField>
+
+<ParamField path="context" type="dict" required>
+  Dictionary containing all pre-computed model inputs.
+
+  <Expandable title="context keys">
+    <ParamField path="elo_ratings" type="dict">
+      Current Elo ratings for each team, keyed by lowercase team name. Teams absent from this dict default to `1500` (`ELO_RATING_INICIAL`).
+    </ParamField>
+
+    <ParamField path="forcas_poisson" type="dict">
+      Attack and defense strength factors per team, as returned by [`calcular_forcas_poisson()`](/api/calcular-forcas-poisson). Each team maps to a sub-dict with keys `ataque_casa`, `defesa_casa`, `ataque_fora`, `defesa_fora`.
+    </ParamField>
+
+    <ParamField path="medias_liga" type="dict">
+      League average goals, as returned by `calcular_forcas_poisson()`. Expected keys: `gols_casa` (float) and `gols_fora` (float).
+    </ParamField>
+
+    <ParamField path="vantagens_casa" type="dict">
+      Per-team home advantage in Elo points, as returned by [`calcular_vantagens_casa()`](/api/calcular-vantagens-casa). Teams absent from this dict default to `30` (`ELO_VANTAGEM_CASA_PADRAO`).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Return value
+
+Returns a `dict` with the following fields:
+
+<ResponseField name="Mandante" type="string">
+  Home team name in title case (e.g. `"Flamengo"`).
+</ResponseField>
+
+<ResponseField name="Visitante" type="string">
+  Away team name in title case.
+</ResponseField>
+
+<ResponseField name="Elo Mandante" type="integer">
+  Home team Elo rating at the time of prediction.
+</ResponseField>
+
+<ResponseField name="Elo Visitante" type="integer">
+  Away team Elo rating at the time of prediction.
+</ResponseField>
+
+<ResponseField name="Gols Esp. Mandante" type="float">
+  Expected goals for the home team after Elo adjustment, rounded to 2 decimal places.
+</ResponseField>
+
+<ResponseField name="Gols Esp. Visitante" type="float">
+  Expected goals for the away team after Elo adjustment, rounded to 2 decimal places.
+</ResponseField>
+
+<ResponseField name="P(Mandante)%" type="string">
+  Normalized home win probability formatted as `"XX.X"` (e.g. `"52.3"`).
+</ResponseField>
+
+<ResponseField name="P(Empate)%" type="string">
+  Normalized draw probability formatted as `"XX.X"`.
+</ResponseField>
+
+<ResponseField name="P(Visitante)%" type="string">
+  Normalized away win probability formatted as `"XX.X"`.
+</ResponseField>
+
+<ResponseField name="Palpite" type="string">
+  Predicted outcome — one of `"Mandante"`, `"Empate"`, or `"Visitante"`, whichever outcome has the highest probability.
+</ResponseField>
+
+<Note>
+  The three probabilities (`P(Mandante)%`, `P(Empate)%`, `P(Visitante)%`) are normalized so that they always sum to `100`. Normalization divides each raw probability by the sum of all three before formatting.
+</Note>
+
+## How it works
+
+1. **Base expected goals** are computed from Poisson strength factors:
+   ```
+   gols_base_casa = ataque_casa * defesa_visitante_fora * media_gols_casa_liga
+   gols_base_visitante = ataque_visitante_fora * defesa_casa * media_gols_fora_liga
+   ```
+2. **Elo adjustment factors** scale those base values:
+   ```
+   elo_diff = (rating_casa + vantagem_casa) - rating_visitante
+   fator_ajuste_casa      = 1 + (elo_diff / 1000) * ELO_INFLUENCE   # ELO_INFLUENCE = 0.10
+   fator_ajuste_visitante = 1 - (elo_diff / 1000) * ELO_INFLUENCE
+   ```
+3. **Final expected goals** floor at `0.1` to avoid degenerate Poisson distributions.
+4. **Score probabilities** are summed over a grid of `0..8 x 0..8` goals using the Poisson PMF.
+
+## Example
+
+```python
+import pandas as pd
+from previsao import (
+    calcular_forcas_poisson,
+    calcular_vantagens_casa,
+    atualizar_ratings_elo,
+    prever_partida_hibrido,
+    ELO_RATING_INICIAL,
+    ELO_VANTAGEM_CASA_PADRAO,
+)
+
+df = pd.read_csv('br-25.csv')
+df['mandante'] = df['mandante'].str.strip().str.lower()
+df['visitante'] = df['visitante'].str.strip().str.lower()
+df['gols_mandante'] = df['gols_mandante'].astype(int)
+df['gols_visitante'] = df['gols_visitante'].astype(int)
+
+forcas_poisson, medias_liga = calcular_forcas_poisson(df)
+vantagens_casa = calcular_vantagens_casa(df)
+
+# Build Elo ratings chronologically from historical matches
+elo_ratings = {}
+for _, partida in df.iterrows():
+    time_c, time_v = partida['mandante'], partida['visitante']
+    placar_c, placar_v = partida['gols_mandante'], partida['gols_visitante']
+    rating_c = elo_ratings.get(time_c, ELO_RATING_INICIAL)
+    rating_v = elo_ratings.get(time_v, ELO_RATING_INICIAL)
+    vantagem_c = vantagens_casa.get(time_c, ELO_VANTAGEM_CASA_PADRAO)
+    novo_c, novo_v = atualizar_ratings_elo(rating_c, rating_v, placar_c, placar_v, vantagem_c)
+    elo_ratings[time_c], elo_ratings[time_v] = novo_c, novo_v
+
+context = {
+    'elo_ratings': elo_ratings,
+    'forcas_poisson': forcas_poisson,
+    'medias_liga': medias_liga,
+    'vantagens_casa': vantagens_casa,
+}
+
+result = prever_partida_hibrido('flamengo', 'sao paulo', context)
+print(result)
+# {
+#   'Mandante': 'Flamengo',
+#   'Visitante': 'Sao Paulo',
+#   'Elo Mandante': 1547,
+#   'Elo Visitante': 1503,
+#   'Gols Esp. Mandante': 1.72,
+#   'Gols Esp. Visitante': 0.98,
+#   'P(Mandante)%': '55.2',
+#   'P(Empate)%': '24.1',
+#   'P(Visitante)%': '20.7',
+#   'Palpite': 'Mandante'
+# }
+```

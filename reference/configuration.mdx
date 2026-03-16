@@ -1,0 +1,92 @@
+---
+title: "Configuration Reference"
+description: "All tunable parameters for the Sassamaru BR-25 prediction model."
+---
+
+Sassamaru BR-25 exposes a small set of numeric constants that control how the hybrid Poisson + Elo model weighs home advantage and Elo strength. These constants live at the top of each entry-point file and can be edited directly before running.
+
+<Warning>
+  `previsao.py` and `sassamaru.py` ship with **different default values** for `ELO_VANTAGEM_CASA_PADRAO` and `ELO_INFLUENCE`. Always confirm which file you are editing before tuning the model.
+</Warning>
+
+## previsao.py parameters
+
+Used by the command-line prediction script.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `ELO_RATING_INICIAL` | `int` | `1500` | Starting Elo rating assigned to every team before any match data is processed. |
+| `ELO_K_FACTOR_BASE` | `int` | `30` | Base K-factor used in the Elo update formula. Higher values make ratings react more sharply to individual results. The effective K is scaled by the goal margin: `K = ELO_K_FACTOR_BASE × (1 + 0.5 × max(0, goal_diff − 1))`. |
+| `ELO_VANTAGEM_CASA_PADRAO` | `int` | `30` | Home-advantage bonus in Elo points applied when per-team home data is insufficient to calculate a dynamic advantage. Added to the home team's rating before computing expected outcomes. |
+| `POISSON_MAX_GOLS` | `int` | `8` | Upper bound on the goal range iterated when computing Poisson outcome probabilities. Score combinations `(g_home, g_away)` are evaluated from `0` up to and including this value. |
+| `ELO_INFLUENCE` | `float` | `0.10` | Multiplier controlling how strongly the Elo rating difference adjusts expected goals. Applied as `factor = 1 ± (elo_diff / 1000) × ELO_INFLUENCE`. |
+
+```python
+# previsao.py
+ELO_RATING_INICIAL = 1500
+ELO_K_FACTOR_BASE = 30
+ELO_VANTAGEM_CASA_PADRAO = 30
+POISSON_MAX_GOLS = 8
+ELO_INFLUENCE = 0.10
+```
+
+## sassamaru.py parameters
+
+Used by the GUI simulator. These defaults are intentionally more aggressive to produce sharper predictions in the interactive interface.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `ELO_RATING_INICIAL` | `int` | `1500` | Same as `previsao.py`. Starting Elo rating for all teams. |
+| `ELO_K_FACTOR_BASE` | `int` | `30` | Same as `previsao.py`. Base K-factor before goal-margin scaling. The GUI uses `K = ELO_K_FACTOR_BASE × log(goal_diff + 1)` for non-zero margins. |
+| `ELO_VANTAGEM_CASA_PADRAO` | `int` | `80` | Higher default home advantage compared to `previsao.py`. Reflects stronger home-field weighting in the GUI's parallel simulation engine. |
+| `ELO_INFLUENCE` | `float` | `0.35` | Stronger Elo influence compared to `previsao.py`. Expected goals are adjusted more aggressively based on the Elo gap between teams. |
+| `MAX_GOLS_CONSIDERADOS` | `int` | `8` | Equivalent to `POISSON_MAX_GOLS` in `previsao.py`. Upper goal bound for the Poisson probability grid. |
+
+```python
+# sassamaru.py
+ELO_RATING_INICIAL = 1500
+ELO_K_FACTOR_BASE = 30
+ELO_VANTAGEM_CASA_PADRAO = 80
+ELO_INFLUENCE = 0.35
+MAX_GOLS_CONSIDERADOS = 8
+```
+
+## Parameter details
+
+### ELO_VANTAGEM_CASA_PADRAO
+
+This value is used as a fallback when a team has no recorded home matches in the loaded CSV, preventing the dynamic home-advantage calculation from running. For teams with sufficient data, the model computes the advantage automatically from the average goal differential at home:
+
+```python
+vantagem_rating = 60 * (avg_goal_diff ** 0.8)  if avg_goal_diff > 0  else 0
+```
+
+<Tip>
+  The README recommends keeping `ELO_VANTAGEM_CASA_PADRAO` between **0 and 80**. Values above 80 tend to over-reward the home side and reduce predictive accuracy on neutral-venue fixtures.
+</Tip>
+
+### ELO_INFLUENCE
+
+Controls how much the Elo delta between teams bends the Poisson expected-goal estimates. The adjustment factors are:
+
+```python
+factor_home = 1 + (elo_diff / 1000) * ELO_INFLUENCE
+factor_away = 1 - (elo_diff / 1000) * ELO_INFLUENCE
+```
+
+Both factors are floored at `0.1` to prevent expected goals from going negative.
+
+<Tip>
+  The README recommends keeping `ELO_INFLUENCE` between **0.05 and 0.35**. Values toward the lower end let Poisson base rates dominate; values toward the upper end allow Elo strength differences to drive the prediction more heavily.
+</Tip>
+
+### ELO_K_FACTOR_BASE
+
+The two scripts apply different K-factor scaling formulas:
+
+| File | Formula |
+|---|---|
+| `previsao.py` | `K = ELO_K_FACTOR_BASE × (1 + 0.5 × max(0, goal_diff − 1))` |
+| `sassamaru.py` | `K = ELO_K_FACTOR_BASE × log(goal_diff + 1)` (for goal_diff > 0), else `ELO_K_FACTOR_BASE` |
+
+Both formulas reward larger winning margins with a higher effective K, but the logarithmic variant in `sassamaru.py` grows more slowly for high goal differences.

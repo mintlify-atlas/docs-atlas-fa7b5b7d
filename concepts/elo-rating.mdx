@@ -1,0 +1,123 @@
+---
+title: "Elo Rating System"
+description: "How dynamic Elo ratings track team strength and update after each match."
+---
+
+## Elo basics
+
+Elo is a numerical rating system that represents a team's current strength relative to all other teams. The key properties are:
+
+- Every team starts at the same initial rating (`ELO_RATING_INICIAL = 1500`).
+- After each match, rating points are transferred from the losing side to the winning side.
+- The magnitude of the transfer depends on how surprising the result was: beating a much stronger opponent earns more points than beating a weaker one.
+- Ratings are computed in strict chronological order, so they always reflect a team's form up to that point in the season.
+
+## Constants
+
+| Constant | Value | Description |
+|---|---|---|
+| `ELO_RATING_INICIAL` | `1500` | Starting rating for all teams with no history. |
+| `ELO_K_FACTOR_BASE` | `30` | Base sensitivity of the rating update. Higher values make ratings react faster to results. |
+| `ELO_VANTAGEM_CASA_PADRAO` | `30` | Fallback home advantage (Elo points) for teams without enough historical data. |
+
+## Expected outcome formula
+
+Before each match, the model computes the home team's expected outcome — a value between 0 (certain loss) and 1 (certain win) — accounting for both the rating difference and the home advantage:
+
+```
+exp_c = 1 / (1 + 10 ** ((rating_v - (rating_c + vantagem_c)) / 400))
+```
+
+The away team's expectation is the complement: `exp_v = 1 - exp_c`. The 400-point denominator is the standard Elo scaling constant: a 400-point difference corresponds to a roughly 91% win expectation.
+
+## K-factor and goal-margin adjustment
+
+The base K-factor scales with the margin of victory to reward dominant wins more strongly:
+
+```
+k = ELO_K_FACTOR_BASE * (1 + 0.5 * max(0, diff_gols - 1))
+```
+
+For a 1-goal win `k = 30`. For a 2-goal win `k = 45`. For a 3-goal win `k = 60`, and so on. Draws always use `k = ELO_K_FACTOR_BASE` (since `diff_gols = 0`).
+
+## Rating update function
+
+The full `atualizar_ratings_elo()` function applies all of the above to produce updated ratings for both teams:
+
+```python
+def atualizar_ratings_elo(rating_c, rating_v, placar_c, placar_v, vantagem_c):
+    """
+    Atualiza os ratings Elo dos times mandante e visitante após uma partida.
+    rating_c: Elo do mandante antes do jogo
+    rating_v: Elo do visitante antes do jogo
+    placar_c: Gols do mandante
+    placar_v: Gols do visitante
+    vantagem_c: Vantagem de casa (em pontos Elo)
+    """
+    # Resultado real
+    if placar_c > placar_v:
+        resultado_real = 1.0
+    elif placar_c == placar_v:
+        resultado_real = 0.5
+    else:
+        resultado_real = 0.0
+
+    # Expectativa de resultado
+    exp_c = 1 / (1 + 10 ** ((rating_v - (rating_c + vantagem_c)) / 400))
+    exp_v = 1 - exp_c
+
+    # K pode ser ajustado conforme a diferença de gols
+    diff_gols = abs(placar_c - placar_v)
+    k = ELO_K_FACTOR_BASE * (1 + 0.5 * max(0, diff_gols - 1))
+
+    novo_rating_c = rating_c + k * (resultado_real - exp_c)
+    novo_rating_v = rating_v + k * ((1 - resultado_real) - exp_v)
+    return novo_rating_c, novo_rating_v
+```
+
+The actual result (`resultado_real`) encodes a win as `1.0`, a draw as `0.5`, and a loss as `0.0`. The update formula `k * (resultado_real - exp_c)` means that if the home team wins as expected, the rating barely changes; if an underdog wins, the change is large.
+
+## Home advantage in Elo points
+
+Playing at home is a measurable advantage in Brazilian football. Rather than applying a fixed bonus, Sassamaru BR-25 derives a per-team home advantage from historical match data using `calcular_vantagens_casa()`:
+
+```python
+def calcular_vantagens_casa(df):
+    vantagens = {}
+    times = pd.unique(df['mandante'])
+    for time in times:
+        jogos_casa = df[df['mandante'] == time]
+        saldo_de_gols_medio = (jogos_casa['gols_mandante'] - jogos_casa['gols_visitante']).mean()
+        if saldo_de_gols_medio and saldo_de_gols_medio > 0:
+            vantagem_rating = 60 * (saldo_de_gols_medio ** 0.8)
+        else:
+            vantagem_rating = 0
+        vantagens[time] = vantagem_rating
+    return vantagens
+```
+
+The home advantage formula is:
+
+```
+vantagem_rating = 60 * (saldo_de_gols_medio ** 0.8)
+```
+
+where `saldo_de_gols_medio` is the team's average goal difference across all home matches. The exponent `0.8` dampens the effect of very high goal differences (diminishing returns), and the coefficient `60` scales the result into a meaningful Elo-point range. Teams with a neutral or negative home goal difference receive a `vantagem_rating` of `0`.
+
+## Chronological processing
+
+Ratings are built by iterating through the full historical match dataset in row order (i.e., chronologically). Each match reads the current ratings, computes the update, and writes the new ratings back before moving to the next match:
+
+```python
+elo_ratings = {}
+for _, partida in df.iterrows():
+    time_c, time_v = partida['mandante'], partida['visitante']
+    placar_c, placar_v = partida['gols_mandante'], partida['gols_visitante']
+    rating_c = elo_ratings.get(time_c, ELO_RATING_INICIAL)
+    rating_v = elo_ratings.get(time_v, ELO_RATING_INICIAL)
+    vantagem_c = vantagens_casa.get(time_c, ELO_VANTAGEM_CASA_PADRAO)
+    novo_rating_c, novo_rating_v = atualizar_ratings_elo(rating_c, rating_v, placar_c, placar_v, vantagem_c)
+    elo_ratings[time_c], elo_ratings[time_v] = novo_rating_c, novo_rating_v
+```
+
+Teams not yet seen in the data are initialised at `ELO_RATING_INICIAL` on first encounter. The final ratings in `elo_ratings` capture each team's form as of the last recorded match.

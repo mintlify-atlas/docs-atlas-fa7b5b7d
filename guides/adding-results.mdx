@@ -1,0 +1,88 @@
+---
+title: "Adding Match Results"
+description: "How to add new match results to your CSV to keep the model up to date."
+---
+
+After each round of fixtures, add the completed results to `br-25.csv` so the model's Elo ratings and Poisson strengths reflect the latest data. There are two ways to do this: manual CSV editing and the desktop GUI.
+
+## Method 1 — Manual CSV Editing
+
+Open `br-25.csv` in any text editor or spreadsheet application and append a new row for each completed match. The minimum required columns are `mandante`, `visitante`, `gols_mandante`, and `gols_visitante`. If your file also includes a `resultado` column, fill it in as well.
+
+Example row to append:
+
+```csv
+flamengo,botafogo,flamengo,2,1
+```
+
+Full row with all five columns:
+
+```csv
+mandante,visitante,resultado,gols_mandante,gols_visitante
+...existing rows...
+flamengo,botafogo,flamengo,2,1
+```
+
+<Warning>
+Team names must match the existing names in the CSV exactly (case-insensitive after normalization). If you introduce a new team name that has no prior history in the file, the model will have no Poisson attack/defence data or Elo history for it. This causes the team to fall back to league-average Poisson strengths and the initial Elo rating of 1500, which will produce less reliable predictions until enough matches have been recorded.
+</Warning>
+
+## Method 2 — Desktop GUI
+
+The `sassamaru.py` GUI has a built-in form for appending match results without opening the CSV file directly.
+
+<Steps>
+  <Step title="Open the Add Match dialog">
+    Launch `sassamaru.py` and click the **"Adicionar partida ao CSV"** button in the toolbar at the bottom of the main window.
+  </Step>
+  <Step title="Enter the home team name">
+    In the **mandante** field, type the home team name. The name must match an existing team in the CSV (it is compared after stripping whitespace).
+  </Step>
+  <Step title="Enter the away team name">
+    In the **visitante** field, type the away team name.
+  </Step>
+  <Step title="Enter the goal counts">
+    Fill in **gols_mandante** and **gols_visitante** with non-negative integers. The dialog will warn you and refuse to save if these values cannot be parsed as integers or are negative.
+  </Step>
+  <Step title="Click Adicionar">
+    Click the **"Adicionar"** button. The new row is appended to `br-25.csv` and the application automatically calls `carregar_csv()` to reload the data — recalculating Elo ratings, home advantages, and Poisson strengths immediately.
+  </Step>
+</Steps>
+
+## The `append_to_csv()` Function
+
+The GUI's add-match workflow calls the following function from `sassamaru.py`:
+
+```python
+def append_to_csv(mandante, gols_mandante, visitante, gols_visitante):
+    try:
+        with open(CSV_PATH, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            headers = next(reader)
+    except Exception as e:
+        messagebox.showerror("Erro CSV", f"Erro ao ler CSV: {e}")
+        return False
+
+    new_row = {col: '' for col in headers}
+    new_row['mandante'] = mandante
+    new_row['gols_mandante'] = gols_mandante
+    new_row['visitante'] = visitante
+    new_row['gols_visitante'] = gols_visitante
+
+    try:
+        with open(CSV_PATH, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=headers)
+            writer.writerow(new_row)
+        return True
+    except Exception as e:
+        messagebox.showerror("Erro CSV", f"Erro ao salvar CSV: {e}")
+        return False
+```
+
+The function:
+1. Opens the CSV and reads the existing header row to determine column order.
+2. Constructs a new row dictionary, filling only the four match-data columns and leaving any extra columns empty.
+3. Appends the row using `csv.DictWriter` in append mode (`'a'`), preserving the original column structure.
+4. Returns `True` on success. On any I/O error, it shows an error dialog and returns `False` without modifying the file.
+
+After a successful write, `SimuladorApp.carregar_csv()` is called automatically, which re-runs the full Elo replay and Poisson calculation pipeline on the updated dataset.

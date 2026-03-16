@@ -1,0 +1,122 @@
+---
+title: "Data Preparation"
+description: "How to prepare and validate your Brasileirão match data CSV for use with Sassamaru BR-25."
+---
+
+## Required CSV Format
+
+Sassamaru BR-25 expects a CSV file with at minimum the following four columns:
+
+| Column | Type | Description |
+|---|---|---|
+| `mandante` | string | Home team name |
+| `visitante` | string | Away team name |
+| `gols_mandante` | integer | Goals scored by the home team |
+| `gols_visitante` | integer | Goals scored by the away team |
+
+The full `br-25.csv` file also includes a `resultado` column (the match result label), but only the four columns above are required by the model.
+
+### Sample CSV Snippet
+
+```csv
+mandante,visitante,resultado,gols_mandante,gols_visitante
+guarani,vasco,guarani,4,2
+flanmgo,coritiba,empate,1,1
+internacional,ponte preta,empate,1,1
+cruzeiro,sao caetano,empate,2,2
+fortaleza,bahia,empate,0,0
+juventude,sao paulo,empate,2,2
+```
+
+<Warning>
+Team names in the CSV are normalized to lowercase internally. The model in `previsao.py` applies `str.strip().str.lower()` to both the `mandante` and `visitante` columns on load. This means `"Flamengo"`, `"flamengo"`, and `"FLAMENGO"` are all treated identically — but they must be consistent across rows so that Elo ratings and Poisson strengths accumulate correctly for the same team.
+</Warning>
+
+## The Two CSV Files
+
+The project ships with two data files:
+
+- **`br-25.csv`** — 2025 Brasileirão season data. This is the file used by default in `previsao.py` (`sassamaru-br-25/br-25.csv`) and by `sassamaru.py` (resolved relative to the script location). Update this file as new match results come in during the season.
+- **`campeonato-brasileiro-full.csv`** — Full historical dataset spanning multiple seasons. Use this file to train on a larger sample or to validate calibration against past seasons. `normalize_and_validate_brasileirao.py` targets this file by default.
+
+## Validating Data with `normalize_and_validate_brasileirao.py`
+
+Before using a new or updated CSV with the model, run the validation script to catch common data issues:
+
+```bash
+python normalize_and_validate_brasileirao.py
+```
+
+The script reads `campeonato-brasileiro-full.csv` and performs the following checks:
+
+- **Malformed rows** — Rows that do not have exactly 5 columns are flagged.
+- **Non-integer goals** — Rows where `gols_mandante` or `gols_visitante` cannot be parsed as digits are reported.
+- **Unknown team names** — After normalization, team names not present in the `OFFICIAL_TEAMS` set are flagged as invalid.
+
+The script prints:
+1. All unique raw team names found in the file
+2. The normalization mapping applied to each name
+3. Any team names that remain unknown after normalization
+4. Summary counts for total rows, malformed rows, and rows with non-integer goals
+
+### The `NORMALIZATION_MAP`
+
+The script includes a `NORMALIZATION_MAP` dictionary that maps common lowercase variants and abbreviations to their canonical names:
+
+```python
+NORMALIZATION_MAP = {
+    "vasco": "Vasco",
+    "internacional": "internacional",
+    "corinthians": "Corinthians",
+    "santo": "Santos",
+    "vitoria": "Vitória",
+    "figueirense": "Figueirense",
+    "bahia": "Bahia",
+    "flamengo": "flamengo",
+    "fluminense": "Fluminense",
+    "gremio": "Grêmio",
+    "gremio prudente": "Grêmio Prudente",
+    "ponte preta": "Ponte Preta",
+    "sao paulo": "São Paulo",
+    "sao caetano": "São Caetano",
+    "juventude": "Juventude",
+    "cruzeiro": "Cruzeiro",
+    "goias": "Goiás",
+    "guarani": "Guarani",
+    "parana": "Paraná",
+    "criciuma": "Criciúma",
+    "avai": "Avaí",
+    "fortaleza": "Fortaleza",
+    "mirassol": "Mirassol",
+    "americaempatern": "América-RN",
+    "america mineiro": "América-MG",
+    "america": "América-MG",
+    "cap": "Athletico-PR",
+    "cam": "Atlético-MG",
+    "atletico goianense": "Atlético-GO",
+    "atletico mineiro": "Atlético-MG",
+    "atletico paranaense": "Athletico-PR",
+    "cuiaba": "Cuiabá",
+    "nautico": "Náutico",
+    "chapecoense": "Chapecoense",
+    "botafogo": "Botafogo",
+    "bragantino": "Bragantino",
+    "ceara": "Ceará",
+    "portuguesa": "Portuguesa",
+    "santa cruz": "Santa Cruz",
+    "sport": "Sport",
+    "empate": "Empate",
+    # Add more as needed
+}
+```
+
+To add a new team or alias, append an entry to `NORMALIZATION_MAP` and add the canonical name to `OFFICIAL_TEAMS`.
+
+## Updating the CSV Mid-Season
+
+During the season, append new completed match rows to `br-25.csv` as results come in. A few tips:
+
+- Keep one row per completed match — do not include scheduled fixtures without scores.
+- Use consistent lowercase team names (matching what is already in the file) to avoid creating phantom duplicate teams in the Elo and Poisson calculations.
+- After appending rows, re-run `normalize_and_validate_brasileirao.py` to confirm no new invalid team names were introduced.
+- If using the desktop GUI (`sassamaru.py`), you can use the built-in "Adicionar partida ao CSV" button instead of editing the file manually — see the [Adding Match Results](/guides/adding-results) guide.

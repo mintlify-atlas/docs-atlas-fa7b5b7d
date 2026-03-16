@@ -1,0 +1,120 @@
+---
+title: "calcular_forcas_poisson"
+description: "Compute team attack and defense strength factors for home and away contexts."
+---
+
+## Signature
+
+```python
+calcular_forcas_poisson(df) -> (forcas: dict, medias_liga: dict)
+```
+
+Analyzes historical match data to derive each team's attacking and defensive strength relative to the league average. These strength factors feed directly into the Poisson-based expected goals calculation inside [`prever_partida_hibrido()`](/api/prever-partida-hibrido).
+
+## Parameters
+
+<ParamField path="df" type="pd.DataFrame" required>
+  DataFrame of historical matches. Must contain the following columns:
+
+  | Column | Type | Description |
+  |---|---|---|
+  | `mandante` | string | Home team name (lowercase) |
+  | `visitante` | string | Away team name (lowercase) |
+  | `gols_mandante` | integer | Goals scored by the home team |
+  | `gols_visitante` | integer | Goals scored by the away team |
+</ParamField>
+
+## Return values
+
+Returns a tuple `(forcas, medias_liga)`.
+
+<ResponseField name="forcas" type="dict">
+  Maps each team name (string) to a sub-dict of four strength factors:
+
+  <Expandable title="strength factor keys">
+    <ResponseField name="ataque_casa" type="float">
+      Home attack strength: ratio of the team's average home goals scored to the league-wide average home goals.
+    </ResponseField>
+    <ResponseField name="defesa_casa" type="float">
+      Home defense strength: ratio of goals conceded at home per game to the league-wide average away goals.
+    </ResponseField>
+    <ResponseField name="ataque_fora" type="float">
+      Away attack strength: ratio of the team's average away goals scored to the league-wide average away goals.
+    </ResponseField>
+    <ResponseField name="defesa_fora" type="float">
+      Away defense strength: ratio of goals conceded away per game to the league-wide average home goals.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="medias_liga" type="dict">
+  League-wide goal averages with two keys:
+  - `gols_casa` (float) — average goals scored by home teams per match
+  - `gols_fora` (float) — average goals scored by away teams per match
+</ResponseField>
+
+## How strength factors are calculated
+
+Each factor is a ratio comparing a team's own average to the league average. A value above `1.0` means the team performs above the league mean; below `1.0` means below average.
+
+```
+ataque_casa  = team_avg_home_goals_scored  / league_avg_home_goals
+defesa_casa  = team_avg_home_goals_conceded / league_avg_away_goals
+ataque_fora  = team_avg_away_goals_scored  / league_avg_away_goals
+defesa_fora  = team_avg_away_goals_conceded / league_avg_home_goals
+```
+
+If a team has no home (or away) matches in the dataset, the factor defaults to `1.0` to avoid division by zero.
+
+## Function body
+
+```python
+def calcular_forcas_poisson(df):
+    times = pd.unique(df['mandante'].tolist() + df['visitante'].tolist())
+    forcas = {}
+    # Médias da liga
+    media_gols_casa = df['gols_mandante'].mean()
+    media_gols_fora = df['gols_visitante'].mean()
+    medias_liga = {'gols_casa': media_gols_casa, 'gols_fora': media_gols_fora}
+    # Forças de ataque/defesa para cada time
+    for time in times:
+        jogos_casa = df[df['mandante'] == time]
+        jogos_fora = df[df['visitante'] == time]
+        ataque_casa = (jogos_casa['gols_mandante'].mean() / media_gols_casa) if not jogos_casa.empty and media_gols_casa > 0 else 1.0
+        defesa_casa = (jogos_casa['gols_visitante'].mean() / media_gols_fora) if not jogos_casa.empty and media_gols_fora > 0 else 1.0
+        ataque_fora = (jogos_fora['gols_visitante'].mean() / media_gols_fora) if not jogos_fora.empty and media_gols_fora > 0 else 1.0
+        defesa_fora = (jogos_fora['gols_mandante'].mean() / media_gols_casa) if not jogos_fora.empty and media_gols_casa > 0 else 1.0
+        forcas[time] = {
+            'ataque_casa': ataque_casa,
+            'defesa_casa': defesa_casa,
+            'ataque_fora': ataque_fora,
+            'defesa_fora': defesa_fora
+        }
+    return forcas, medias_liga
+```
+
+## Example
+
+```python
+import pandas as pd
+from previsao import calcular_forcas_poisson
+
+df = pd.read_csv('br-25.csv')
+df['mandante'] = df['mandante'].str.strip().str.lower()
+df['visitante'] = df['visitante'].str.strip().str.lower()
+df['gols_mandante'] = df['gols_mandante'].astype(int)
+df['gols_visitante'] = df['gols_visitante'].astype(int)
+
+forcas, medias_liga = calcular_forcas_poisson(df)
+
+print(medias_liga)
+# {'gols_casa': 1.54, 'gols_fora': 1.12}
+
+print(forcas['flamengo'])
+# {
+#   'ataque_casa': 1.23,
+#   'defesa_casa': 0.87,
+#   'ataque_fora': 1.10,
+#   'defesa_fora': 0.91
+# }
+```

@@ -1,0 +1,131 @@
+---
+title: "normalize_team & validate"
+description: "Utility functions for normalizing team names and validating CSV data integrity."
+---
+
+The `normalize_and_validate_brasileirao.py` script provides two capabilities: a `normalize_team()` function for cleaning individual team name strings, and a `main()` validation routine for auditing the full CSV dataset before running the model.
+
+## normalize_team
+
+```python
+normalize_team(name: str) -> str
+```
+
+Looks up the raw team name in `NORMALIZATION_MAP` (case-insensitively) and returns the canonical form. If the name is not found in the map, the stripped original string is returned unchanged.
+
+### Parameters
+
+<ParamField path="name" type="string" required>
+  Raw team name as it appears in the CSV, potentially with leading/trailing whitespace, inconsistent casing, or accent-free spelling.
+</ParamField>
+
+### Return value
+
+A string containing the normalized team name as defined in `NORMALIZATION_MAP`, or the stripped original if no mapping exists.
+
+### Implementation
+
+```python
+def normalize_team(name):
+    n = name.strip().lower()
+    return NORMALIZATION_MAP.get(n, name.strip())
+```
+
+### NORMALIZATION_MAP
+
+The full mapping from raw (lowercase) input to canonical team name:
+
+| Raw input | Normalized name |
+|---|---|
+| `vasco` | `Vasco` |
+| `internacional` | `internacional` |
+| `corinthians` | `Corinthians` |
+| `santo` | `Santos` |
+| `vitoria` | `Vitória` |
+| `figueirense` | `Figueirense` |
+| `bahia` | `Bahia` |
+| `flamengo` | `flamengo` |
+| `fluminense` | `Fluminense` |
+| `gremio` | `Grêmio` |
+| `gremio prudente` | `Grêmio Prudente` |
+| `ponte preta` | `Ponte Preta` |
+| `sao paulo` | `São Paulo` |
+| `sao caetano` | `São Caetano` |
+| `juventude` | `Juventude` |
+| `cruzeiro` | `Cruzeiro` |
+| `goias` | `Goiás` |
+| `guarani` | `Guarani` |
+| `parana` | `Paraná` |
+| `criciuma` | `Criciúma` |
+| `avai` | `Avaí` |
+| `fortaleza` | `Fortaleza` |
+| `mirassol` | `Mirassol` |
+| `americaempatern` | `América-RN` |
+| `america mineiro` | `América-MG` |
+| `america` | `América-MG` |
+| `cap` | `Athletico-PR` |
+| `cam` | `Atlético-MG` |
+| `atletico goianense` | `Atlético-GO` |
+| `atletico mineiro` | `Atlético-MG` |
+| `atletico paranaense` | `Athletico-PR` |
+| `cuiaba` | `Cuiabá` |
+| `nautico` | `Náutico` |
+| `chapecoense` | `Chapecoense` |
+| `botafogo` | `Botafogo` |
+| `bragantino` | `Bragantino` |
+| `ceara` | `Ceará` |
+| `portuguesa` | `Portuguesa` |
+| `santa cruz` | `Santa Cruz` |
+| `sport` | `Sport` |
+| `empate` | `Empate` |
+
+## main() — CSV validation
+
+The `main()` function reads `campeonato-brasileiro-full.csv` and performs a full audit, printing a report to stdout.
+
+### How to run
+
+```bash
+python normalize_and_validate_brasileirao.py
+```
+
+### What it checks
+
+| Check | Description |
+|---|---|
+| Row count | Total number of data rows read from the CSV |
+| Malformed rows | Rows where the column count is not exactly 5; printed with row number |
+| Non-integer goals | Rows where `gols_mandante` or `gols_visitante` cannot be parsed as a digit string |
+| Unknown teams | Team names that, after normalization, do not appear in `OFFICIAL_TEAMS` |
+
+### Output sections
+
+1. **Unique Team Names (raw)** — sorted list of every distinct team name found in the CSV before normalization.
+2. **Normalization Mapping** — every raw name and what it maps to.
+3. **Invalid/Unknown Teams After Normalization** — team names that remain unrecognized after normalization (likely typos or new entrants).
+4. **Totals** — row count, malformed row count, and non-integer goal count, with sample rows for each category.
+
+## OFFICIAL_TEAMS
+
+The canonical set of accepted team names used during validation:
+
+```python
+OFFICIAL_TEAMS = {
+    "América-MG", "América-RN", "AméricaEmpateRN", "América", "América Mineiro",
+    "Athletico-PR", "Atlético-GO", "Atlético-MG", "Atlético Paranaense",
+    "Atlético Goianiense", "Atlético Mineiro",
+    "Bahia", "Botafogo", "Botafogo-SP", "Bragantino", "Brasiliense",
+    "Ceará", "Chapecoense", "Corinthians", "Coritiba", "Criciúma", "Cruzeiro",
+    "CSA", "Cuiabá", "Figueirense", "flamengo", "Fluminense", "Fortaleza",
+    "Goiás", "Grêmio", "Guarani", "internacional", "Ipatinga", "Joinville",
+    "Juventude", "Mirassol", "Náutico", "Palmeiras", "Paraná", "Paysandu",
+    "Ponte Preta", "Portuguesa", "Santa Cruz", "Santos", "Santo André",
+    "Santo", "Santos FC", "Santos Futebol Clube", "São Caetano", "São Paulo",
+    "Sport", "Vasco", "vasco", "Vitoria", "Vitória",
+    "Vitória da Conquista", "Avaí", "Avaí FC"
+}
+```
+
+<Tip>
+  Run `normalize_and_validate_brasileirao.py` against your CSV before training the model or generating predictions. Any team names that appear in the "Invalid/Unknown Teams" section should either be added to `NORMALIZATION_MAP` (if they are known aliases) or added to `OFFICIAL_TEAMS` (if they are new entrants to the Campeonato Brasileiro). Feeding the model unrecognized team names will cause `KeyError` exceptions in `calcular_forcas_poisson()` and `prever_partida_hibrido()`.
+</Tip>

@@ -1,0 +1,112 @@
+---
+title: "Calibration"
+description: "How to tune the model parameters to improve prediction accuracy for your dataset."
+---
+
+The hybrid Poisson + Elo model has several tunable constants. The two most impactful parameters for prediction quality are `ELO_VANTAGEM_CASA_PADRAO` and `ELO_INFLUENCE`.
+
+<Warning>
+`previsao.py` and `sassamaru.py` each define their own copies of these constants at the top of the file. Changing one file does **not** affect the other. Make sure you are editing the constants in the correct script.
+</Warning>
+
+## Primary Tunable Parameters
+
+### `ELO_VANTAGEM_CASA_PADRAO`
+
+The default home advantage applied to a team's Elo rating when no per-team home advantage has been computed (e.g., when a team has played too few home games to calculate a meaningful advantage).
+
+**Location in `previsao.py`:**
+
+```python
+ELO_RATING_INICIAL = 1500
+ELO_K_FACTOR_BASE = 30
+ELO_VANTAGEM_CASA_PADRAO = 30   # <-- home advantage fallback (Elo points)
+POISSON_MAX_GOLS = 8
+ELO_INFLUENCE = 0.10
+```
+
+**Effect:**
+
+- A **higher** value increases predicted home-win probability across all matches, particularly for teams with limited home-game history in the CSV.
+- A **lower** value (including 0) removes the default home-field advantage, producing more neutral predictions.
+- **Recommended range:** 0–80 Elo points.
+
+**Defaults by script:**
+
+| Script | `ELO_VANTAGEM_CASA_PADRAO` |
+|---|---|
+| `previsao.py` | `30` |
+| `sassamaru.py` | `80` |
+
+---
+
+### `ELO_INFLUENCE`
+
+Controls how strongly the Elo rating difference between two teams modifies the Poisson expected-goals values before probability calculations.
+
+The adjustment factor is computed as:
+
+```python
+elo_diff = (rating_casa + vantagem_time_casa) - rating_visitante
+fator_ajuste_casa = 1 + (elo_diff / 1000) * ELO_INFLUENCE
+fator_ajuste_visitante = 1 - (elo_diff / 1000) * ELO_INFLUENCE
+```
+
+**Effect:**
+
+- A **higher** `ELO_INFLUENCE` value means a larger Elo gap produces a bigger boost to the stronger team's expected goals — probability gaps between favourite and underdog widen.
+- A **lower** value (closer to 0) makes Elo almost irrelevant, and predictions rely almost entirely on Poisson attack/defence strengths derived from goal averages.
+- **Recommended range:** 0.05–0.35.
+
+**Defaults by script:**
+
+| Script | `ELO_INFLUENCE` |
+|---|---|
+| `previsao.py` | `0.10` |
+| `sassamaru.py` | `0.35` |
+
+## Secondary Parameters
+
+### `ELO_K_FACTOR_BASE`
+
+Controls how quickly Elo ratings change after each match result. Defined in both scripts as:
+
+```python
+ELO_K_FACTOR_BASE = 30
+```
+
+The actual K factor is scaled up for larger goal-margin wins:
+
+```python
+# previsao.py
+k = ELO_K_FACTOR_BASE * (1 + 0.5 * max(0, diff_gols - 1))
+
+# sassamaru.py
+k_ajustado = ELO_K_FACTOR_BASE * math.log(margem_gols + 1) if margem_gols > 0 else ELO_K_FACTOR_BASE
+```
+
+A higher `ELO_K_FACTOR_BASE` makes ratings more volatile — useful early in a season when there are few data points. A lower value produces more stable, slower-moving ratings suited to larger datasets.
+
+### `POISSON_MAX_GOLS`
+
+The upper bound on goals considered when summing Poisson probabilities:
+
+```python
+POISSON_MAX_GOLS = 8   # previsao.py
+MAX_GOLS_CONSIDERADOS = 8   # sassamaru.py
+```
+
+The model sums all `(g_c, g_v)` combinations from 0 to this value to compute win/draw/loss probabilities. Increasing it slightly improves accuracy for high-scoring matches at the cost of a marginally longer computation. Values below 6 may noticeably undercount high-scoring outcomes.
+
+## Iterative Calibration Workflow
+
+<Tip>
+To find the best parameter values for your dataset, compare model predictions against known outcomes over a held-out set of historical matches:
+
+1. Take a sample of matches from `campeonato-brasileiro-full.csv` that you will treat as ground truth.
+2. Train the model on all rows **before** those matches.
+3. Run predictions for the held-out sample using `previsao.py`.
+4. Compare the predicted outcome (Palpite column) and probabilities to the actual results.
+5. Adjust `ELO_VANTAGEM_CASA_PADRAO` and `ELO_INFLUENCE` and repeat.
+6. Measure calibration quality using Brier score or log-loss across the held-out set.
+</Tip>

@@ -1,0 +1,80 @@
+---
+title: "calcular_xg_por_clube"
+description: "Calculate total and average expected goals (xG) for each club using historical match data."
+---
+
+## Signature
+
+```python
+calcular_xg_por_clube(df) -> (xg_total: dict, xg_medio: dict)
+```
+
+Iterates over every match in the dataset, calls `prever_partida_hibrido()` for each one with empty Elo ratings, and accumulates the expected goals produced by the Poisson model for each club.
+
+## Parameters
+
+<ParamField path="df" type="pd.DataFrame" required>
+  DataFrame of all historical matches. Must contain columns `mandante`, `visitante`, `gols_mandante`, and `gols_visitante`. This is the same DataFrame used to train the Poisson strength factors.
+</ParamField>
+
+## Return values
+
+Returns a tuple `(xg_total, xg_medio)`.
+
+<ResponseField name="xg_total" type="dict">
+  Maps each club name (string) to the total expected goals accumulated across all of its matches in the dataset (both home and away).
+</ResponseField>
+
+<ResponseField name="xg_medio" type="dict">
+  Maps each club name (string) to the average expected goals per match — i.e. `xg_total[club] / number_of_matches`.
+</ResponseField>
+
+## Function body
+
+```python
+def calcular_xg_por_clube(df):
+    forcas_poisson, medias_liga = calcular_forcas_poisson(df)
+    xg_por_clube = defaultdict(float)
+    jogos_por_clube = defaultdict(int)
+
+    for _, row in df.iterrows():
+        mandante = row['mandante']
+        visitante = row['visitante']
+        res = prever_partida_hibrido(mandante, visitante, {}, forcas_poisson, medias_liga, {})
+        if res:
+            xg_por_clube[mandante] += res['gols_esperados_mandante']
+            xg_por_clube[visitante] += res['gols_esperados_visitante']
+            jogos_por_clube[mandante] += 1
+            jogos_por_clube[visitante] += 1
+
+    xg_medio = {}
+    for time in xg_por_clube:
+        xg_medio[time] = xg_por_clube[time] / jogos_por_clube[time] if jogos_por_clube[time] > 0 else 0
+
+    return xg_por_clube, xg_medio
+```
+
+<Note>
+  This function calls `prever_partida_hibrido()` from `sassamaru.py` with empty dicts for `elo_ratings` and `vantagens_casa`. All teams therefore use the default Elo rating of `1500` and zero home advantage, so the expected goals values reflect **Poisson-only** estimates — Elo adjustments are not applied. This makes `calcular_xg_por_clube()` useful for comparing clubs on a level playing field based purely on historical goal patterns.
+</Note>
+
+## Example
+
+```python
+import pandas as pd
+from collections import defaultdict
+from sassamaru import calcular_xg_por_clube
+
+df = pd.read_csv('br-25.csv')
+df['mandante'] = df['mandante'].str.strip().str.lower()
+df['visitante'] = df['visitante'].str.strip().str.lower()
+df['gols_mandante'] = df['gols_mandante'].astype(int)
+df['gols_visitante'] = df['gols_visitante'].astype(int)
+
+xg_total, xg_medio = calcular_xg_por_clube(df)
+
+# Sort clubs by total xG, highest first
+ranking = sorted(xg_total.items(), key=lambda x: x[1], reverse=True)
+for clube, xg in ranking[:5]:
+    print(f"{clube:20} | xG total: {xg:.2f} | xG/jogo: {xg_medio[clube]:.2f}")
+```

@@ -1,0 +1,88 @@
+---
+title: "calcular_vantagens_casa"
+description: "Calculate the per-team home advantage in Elo points from historical home performance."
+---
+
+## Signature
+
+```python
+calcular_vantagens_casa(df) -> dict
+```
+
+Derives each team's individual home advantage bonus by examining their average goal difference when playing at home. The result is expressed in Elo points and is added to the home team's rating before computing the Elo expected outcome.
+
+## Parameters
+
+<ParamField path="df" type="pd.DataFrame" required>
+  DataFrame of historical matches. Must contain the following columns:
+
+  | Column | Type | Description |
+  |---|---|---|
+  | `mandante` | string | Home team name |
+  | `visitante` | string | Away team name |
+  | `gols_mandante` | integer | Goals scored by home team |
+  | `gols_visitante` | integer | Goals scored by away team |
+</ParamField>
+
+## Return value
+
+<ResponseField name="vantagens" type="dict">
+  Maps each home team name (string) to its home advantage bonus in Elo points (float). Teams with a zero or negative average home goal difference receive a value of `0`.
+</ResponseField>
+
+## Formula
+
+For each team, the mean goal difference across all home matches is computed:
+
+```
+saldo_medio = mean(gols_mandante - gols_visitante)   # over all home games
+```
+
+If `saldo_medio > 0`, the Elo bonus is:
+
+```
+vantagem_rating = 60 * (saldo_medio ** 0.8)
+```
+
+Otherwise, `vantagem_rating = 0`.
+
+The power of `0.8` dampens large goal differences, preventing outlier seasons from producing unrealistically high bonuses.
+
+## Function body
+
+```python
+def calcular_vantagens_casa(df):
+    vantagens = {}
+    times = pd.unique(df['mandante'])
+    for time in times:
+        jogos_casa = df[df['mandante'] == time]
+        saldo_de_gols_medio = (jogos_casa['gols_mandante'] - jogos_casa['gols_visitante']).mean()
+        if saldo_de_gols_medio and saldo_de_gols_medio > 0:
+            vantagem_rating = 60 * (saldo_de_gols_medio ** 0.8)
+        else:
+            vantagem_rating = 0
+        vantagens[time] = vantagem_rating
+    return vantagens
+```
+
+## Example
+
+```python
+import pandas as pd
+from previsao import calcular_vantagens_casa
+
+df = pd.read_csv('br-25.csv')
+df['mandante'] = df['mandante'].str.strip().str.lower()
+df['gols_mandante'] = df['gols_mandante'].astype(int)
+df['gols_visitante'] = df['gols_visitante'].astype(int)
+
+vantagens = calcular_vantagens_casa(df)
+
+# A team with an average home goal difference of +0.5
+# receives a bonus of: 60 * (0.5 ** 0.8) ≈ 33.9 Elo points
+print(vantagens.get('flamengo', 0))
+```
+
+<Note>
+  Only teams that appear as `mandante` (home team) in the DataFrame are included in the returned dict. Teams with no home matches or with a non-positive average home goal difference are assigned a bonus of `0` rather than being excluded.
+</Note>

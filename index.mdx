@@ -1,97 +1,96 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Sassamaru BR-25"
+description: "A hybrid Poisson + Elo model for predicting Brazilian football (Brasileirão) match outcomes — win/draw/loss probabilities and expected goals for every fixture."
 ---
 
-## Setting up
-
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Get Started" icon="rocket" href="/introduction">
+    Understand the model and set up your environment in minutes.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Quickstart" icon="bolt" href="/quickstart">
+    Run your first match prediction in under 5 minutes.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Model Concepts" icon="brain" href="/concepts/hybrid-model">
+    Deep dive into the Poisson + Elo hybrid architecture.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="API Reference" icon="code" href="/api/prever-partida-hibrido">
+    Explore all public functions and their parameters.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What is Sassamaru BR-25?
 
-Everything you need to create world-class documentation.
+Sassamaru BR-25 is a statistical football prediction system built specifically for the **Campeonato Brasileiro**. It combines two well-established rating methodologies:
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+- **Poisson distribution** — estimates the expected number of goals for each team based on historical attack/defense strength relative to the league average.
+- **Elo rating system** — tracks team strength dynamically, updating after each match based on results and goal margin.
 
-## Need inspiration?
+Together, they produce accurate, calibrated probability distributions for every match: probability of a home win, draw, or away win — along with expected goal totals for each team.
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+## Key features
+
+<CardGroup cols={3}>
+  <Card title="Hybrid Prediction" icon="chart-mixed">
+    Combines Poisson goal modeling with dynamic Elo adjustments for more accurate predictions.
+  </Card>
+  <Card title="Dynamic Elo Ratings" icon="arrow-trend-up">
+    Elo ratings update after each match, reflecting current team form and strength.
+  </Card>
+  <Card title="Home Advantage" icon="house">
+    Per-team home advantage calculated from historical goal difference as mandante.
+  </Card>
+  <Card title="Monte Carlo Simulation" icon="dice">
+    Run 10,000 to 100,000 simulations for statistically robust probability estimates.
+  </Card>
+  <Card title="xG Rankings" icon="ranking-star">
+    View expected goals (xG) totals and averages per club across the season.
+  </Card>
+  <Card title="Desktop GUI" icon="desktop">
+    Tkinter-based GUI for entering matches, running simulations, and viewing rankings interactively.
+  </Card>
+</CardGroup>
+
+## How it works
+
+<Steps>
+  <Step title="Load historical match data">
+    The model reads `br-25.csv` — a CSV of past Brasileirão matches with home team, away team, and final scores.
+  </Step>
+  <Step title="Calculate Poisson attack/defense strengths">
+    Each team's attacking and defensive strength is computed relative to the league average, separately for home and away contexts.
+  </Step>
+  <Step title="Build dynamic Elo ratings">
+    Elo ratings start at 1500 and are updated chronologically through every historical match. Goal margin affects the K-factor.
+  </Step>
+  <Step title="Predict match outcomes">
+    For any fixture, the hybrid model combines Poisson-estimated goals with Elo-adjusted factors to compute win/draw/loss probabilities.
+  </Step>
+  <Step title="Output results">
+    Results are printed as a Markdown table ready for reports, or saved to a timestamped `.md` file from the GUI.
+  </Step>
+</Steps>
+
+## Example output
+
+```markdown
+# Previsão de Jogos - Modelo Híbrido Poisson + Elo
+
+| Mandante      | Visitante         | Gols Mandante | Gols Visitante | Prob Mandante (%) | Prob Empate (%) | Prob Visitante (%) | Palpite   |
+|:------------- |:----------------- | ------------: | -------------: | ----------------: | --------------: | -----------------:|:----------|
+| Internacional | Vitoria           |          1.23 |           0.98 |              42.1 |            29.5 |               28.4 | Mandante  |
+| Bahia         | Atletico Mineiro  |          1.10 |           1.05 |              35.0 |            33.0 |               32.0 | Empate    |
+| Flamengo      | Sao Paulo         |          1.45 |           1.12 |              48.2 |            27.1 |               24.7 | Mandante  |
+```
+
+## Requirements
+
+- Python 3.7+
+- `pandas`
+
+```bash
+pip install pandas
+```
+
+<Note>
+  The `sassamaru.py` desktop GUI additionally requires `tkinter` (included in most Python installations) and `numpy`.
+</Note>

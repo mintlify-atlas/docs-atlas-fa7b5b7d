@@ -1,0 +1,124 @@
+---
+title: "Data Format"
+description: "CSV data format specification for Sassamaru BR-25 match input files."
+---
+
+Sassamaru BR-25 reads match history from CSV files. The model normalizes team names before any processing and expects goal counts to be non-negative integers.
+
+## Required columns
+
+Every input CSV **must** contain these four columns. The column names are case-sensitive.
+
+| Column | Type | Description |
+|---|---|---|
+| `mandante` | string | Home team name. Internally normalized to lowercase via `str.strip().str.lower()` before any processing. |
+| `visitante` | string | Away team name. Same normalization applied. |
+| `gols_mandante` | integer ≥ 0 | Goals scored by the home team. |
+| `gols_visitante` | integer ≥ 0 | Goals scored by the away team. |
+
+## Additional columns
+
+Some provided data files contain extra columns that are consumed by specific scripts.
+
+| Column | Present in | Used by | Description |
+|---|---|---|---|
+| `resultado` | `br-25.csv`, `brasileiro-2025.csv` | `rating_elo_25.py` | Match result string, e.g. `guarani` (winner name) or `empate`. |
+| `data` | `campeonato-brasileiro-full.csv` | `br-2024.py` | Match date string used for chronological sorting. |
+| `vencedor` | `campeonato-brasileiro-full.csv` | — | Winner team name, or `-` for a draw. |
+
+<Note>
+  The core prediction scripts (`previsao.py` and `sassamaru.py`) only read `mandante`, `visitante`, `gols_mandante`, and `gols_visitante`. Additional columns are silently ignored.
+</Note>
+
+## Sample CSV
+
+The minimal format used by `previsao.py` and `sassamaru.py`:
+
+```csv
+mandante,visitante,resultado,gols_mandante,gols_visitante
+flamengo,palmeiras,flamengo,2,1
+botafogo,sao paulo,empate,1,1
+cruzeiro,atletico mineiro,atletico mineiro,0,2
+vasco,fluminense,fluminense,0,1
+internacional,gremio,empate,2,2
+fortaleza,ceara,fortaleza,3,0
+```
+
+The full historical file uses a richer schema:
+
+```csv
+"ID","rodata","data","hora","mandante","visitante","formacao_mandante","formacao_visitante","tecnico_mandante","tecnico_visitante","vencedor","arena","mandante_Placar","visitante_Placar","mandante_Estado","visitante_Estado"
+"1","1","29/03/2003","16:00","Guarani","Vasco","","","","","Guarani"," Brinco de Ouro","4","2","SP","RJ"
+"2","1","29/03/2003","16:00","Athletico-PR","Gremio","","","","","Athletico-PR"," Arena da Baixada","2","0","PR","RS"
+```
+
+## Provided data files
+
+| File | Description |
+|---|---|
+| `br-25.csv` | 2025 Brasileirão season data. Default input for both `previsao.py` and `sassamaru.py`. Contains `mandante`, `visitante`, `resultado`, `gols_mandante`, `gols_visitante`. |
+| `campeonato-brasileiro-full.csv` | Full historical dataset spanning multiple seasons from 2003 onward. Contains an extended schema with match date, round, formations, coaches, arena, and state columns. |
+| `brasileiro-2025.csv` | Additional 2025 season data with the same five-column schema as `br-25.csv`. Team names may use mixed casing and abbreviations such as `CAM` for Atlético Mineiro. |
+
+## Team name normalization
+
+The model calls `str.strip().str.lower()` on both `mandante` and `visitante` before computing Poisson forces and Elo ratings:
+
+```python
+df['mandante'] = df['mandante'].str.strip().str.lower()
+df['visitante'] = df['visitante'].str.strip().str.lower()
+```
+
+This means `Flamengo`, `flamengo`, and `  FLAMENGO  ` are all treated as `flamengo` internally.
+
+The `normalize_and_validate_brasileirao.py` utility provides an explicit `NORMALIZATION_MAP` for converting raw lowercase names to their canonical display forms. This map is used when validating the historical dataset.
+
+### NORMALIZATION_MAP reference
+
+| Raw (lowercase) | Canonical display name |
+|---|---|
+| `vasco` | `Vasco` |
+| `internacional` | `internacional` |
+| `corinthians` | `Corinthians` |
+| `santo` | `Santos` |
+| `vitoria` | `Vitória` |
+| `figueirense` | `Figueirense` |
+| `bahia` | `Bahia` |
+| `flamengo` | `flamengo` |
+| `fluminense` | `Fluminense` |
+| `gremio` | `Grêmio` |
+| `gremio prudente` | `Grêmio Prudente` |
+| `ponte preta` | `Ponte Preta` |
+| `sao paulo` | `São Paulo` |
+| `sao caetano` | `São Caetano` |
+| `juventude` | `Juventude` |
+| `cruzeiro` | `Cruzeiro` |
+| `goias` | `Goiás` |
+| `guarani` | `Guarani` |
+| `parana` | `Paraná` |
+| `criciuma` | `Criciúma` |
+| `avai` | `Avaí` |
+| `fortaleza` | `Fortaleza` |
+| `mirassol` | `Mirassol` |
+| `americaempatern` | `América-RN` |
+| `america mineiro` | `América-MG` |
+| `america` | `América-MG` |
+| `cap` | `Athletico-PR` |
+| `cam` | `Atlético-MG` |
+| `atletico goianense` | `Atlético-GO` |
+| `atletico mineiro` | `Atlético-MG` |
+| `atletico paranaense` | `Athletico-PR` |
+| `cuiaba` | `Cuiabá` |
+| `nautico` | `Náutico` |
+| `chapecoense` | `Chapecoense` |
+| `botafogo` | `Botafogo` |
+| `bragantino` | `Bragantino` |
+| `ceara` | `Ceará` |
+| `portuguesa` | `Portuguesa` |
+| `santa cruz` | `Santa Cruz` |
+| `sport` | `Sport` |
+| `empate` | `Empate` |
+
+<Note>
+  The normalization map is applied by `normalize_team()` in `normalize_and_validate_brasileirao.py`. The core prediction scripts do **not** apply this mapping automatically — they work with whatever lowercase strings are present after `str.strip().str.lower()`. Use the validator script to audit raw CSV files before feeding them to the model.
+</Note>
