@@ -1,0 +1,96 @@
+{
+  "projectType": "ai-ml",
+  "projectName": "Sassamaru BR-25",
+  "projectDescription": "A hybrid Poisson + Elo model for predicting Brazilian football (Brasileirão) match outcomes, providing win/draw/loss probabilities and expected goals for each fixture.",
+  "theme": "palm",
+  "primaryColor": "#46bde6",
+  "lightColor": "#a4e0f1",
+  "darkColor": "#80cee3",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["introduction", "quickstart"]
+          },
+          {
+            "group": "Concepts",
+            "pages": [
+              "concepts/poisson-model",
+              "concepts/elo-rating",
+              "concepts/hybrid-model"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/data-preparation",
+              "guides/running-predictions",
+              "guides/calibration",
+              "guides/adding-results"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/configuration",
+              "reference/data-format",
+              "reference/output-format"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core Functions",
+            "pages": [
+              "api/prever-partida-hibrido",
+              "api/calcular-forcas-poisson",
+              "api/calcular-vantagens-casa",
+              "api/atualizar-ratings-elo"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/calcular-xg-por-clube",
+              "api/normalize-and-validate"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Hybrid Poisson + Elo model for match outcome prediction",
+    "Dynamic Elo ratings updated after each match result",
+    "Home advantage calculation based on historical goal difference",
+    "Attack and defense strength factors per team (home/away)",
+    "Win/draw/loss probability output with expected goals",
+    "Parallel Monte Carlo simulation support (10k–100k runs)",
+    "Desktop GUI (Tkinter) for interactive match entry and simulation",
+    "Markdown output tables ready for reports and posts",
+    "CSV data management with append support for new results",
+    "xG (expected goals) ranking per club"
+  ],
+  "publicApiSurface": [
+    "prever_partida_hibrido(time_casa, time_visitante, context) -> dict",
+    "calcular_forcas_poisson(df) -> (forcas, medias_liga)",
+    "calcular_vantagens_casa(df) -> dict",
+    "atualizar_ratings_elo(rating_c, rating_v, placar_c, placar_v, vantagem_c) -> (float, float)",
+    "calcular_xg_por_clube(df) -> (xg_total, xg_medio)",
+    "poisson(lmbda, k) -> float",
+    "rodar_simulacao_paralela(df, jogos, n_simulacoes, progress_callback) -> list",
+    "append_to_csv(mandante, gols_mandante, visitante, gols_visitante) -> bool",
+    "normalize_team(name) -> str",
+    "ELO_RATING_INICIAL = 1500",
+    "ELO_K_FACTOR_BASE = 30",
+    "ELO_VANTAGEM_CASA_PADRAO = 30",
+    "ELO_INFLUENCE = 0.10",
+    "POISSON_MAX_GOLS = 8"
+  ]
+}
